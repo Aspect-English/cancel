@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aspect K書會館｜取消預約</title>
+
+  <style>
+    body {
+      font-family: "Microsoft JhengHei", Arial, sans-serif;
+      background: #f5f1e8;
+      padding: 20px;
+      margin: 0;
+    }
+
+    .container {
+      max-width: 720px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      text-align: center;
+      color: #8b3a0e;
+      font-size: 36px;
+      margin-bottom: 20px;
+    }
+
+    .box {
+      background: #fff;
+      border-radius: 14px;
+      padding: 24px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+
+    h2 {
+      color: #333;
+      font-size: 20px;
+      margin-top: 0;
+      margin-bottom: 12px;
+      border-left: 4px solid #8b3a0e;
+      padding-left: 10px;
+    }
+
+    p {
+      color: #666;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    label {
+      display: block;
+      font-weight: bold;
+      color: #555;
+      margin-top: 15px;
+    }
+
+    input {
+      width: 100%;
+      padding: 12px;
+      margin-top: 8px;
+      margin-bottom: 5px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      font-size: 16px;
+      box-sizing: border-box;
+      background-color: #fafafa;
+    }
+
+    input:read-only {
+      background-color: #eee;
+      color: #666;
+      cursor: not-allowed;
+    }
+
+    button {
+      width: 100%;
+      border: none;
+      background: #8b3a0e;
+      color: white;
+      border-radius: 10px;
+      padding: 14px 16px;
+      cursor: pointer;
+      font-size: 17px;
+      margin-top: 20px;
+      font-weight: bold;
+    }
+
+    button:hover {
+      background: #722f0b;
+    }
+
+    button:disabled {
+      background: #bbb;
+      cursor: not-allowed;
+    }
+
+    #bookingInfo, #resultText {
+      white-space: pre-line;
+      line-height: 1.8;
+      font-weight: 500;
+      color: #222;
+      background: #fdfcf7;
+      padding: 15px;
+      border-radius: 8px;
+      border: 1px dashed #e6dfd3;
+    }
+
+    .notice {
+      background: #fff7ed;
+      border-left: 4px solid #d97706;
+      padding: 12px;
+      border-radius: 8px;
+      color: #7c2d12;
+      margin-top: 12px;
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    .back-link {
+      display: block;
+      text-align: center;
+      margin-top: 15px;
+      color: #8b3a0e;
+      text-decoration: none;
+      font-weight: bold;
+    }
+
+    .back-link:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+
+<body>
+  <iframe name="hidden_iframe" style="display:none;"></iframe>
+
+  <div class="container">
+    <h1>Aspect K書會館｜取消預約</h1>
+
+    <div class="box">
+      <h2>取消預約確認</h2>
+      <p>
+        請確認以下資料是否正確。<br>
+        ※ 僅可於「預約日前」自行取消。<br>
+        ※ 預約當天請私訊官方 LINE，由櫃台協助取消。
+      </p>
+
+      <label>預約日期</label>
+      <input type="date" id="cancelDate" readonly />
+
+      <label>預約電話</label>
+      <input id="cancelPhone" readonly />
+
+      <label>預約 Email</label>
+      <input id="cancelEmail" readonly />
+
+      <label>取消驗證碼</label>
+      <input id="cancelToken" readonly />
+
+      <div class="notice">
+        系統會依照信件連結自動帶入資料，並查詢原本的預約內容。
+      </div>
+
+      <button type="button" id="cancelBtn" onclick="cancelBooking()" disabled>資料確認中...</button>
+    </div>
+
+    <div class="box">
+      <h2>原預約內容</h2>
+      <p id="bookingInfo">正在讀取預約資料...</p>
+    </div>
+
+    <div class="box">
+      <h2>取消結果</h2>
+      <p id="resultText">尚未執行取消預約程序</p>
+      <a class="back-link" href="https://aspect-english.github.io/">返回預約頁面</a>
+    </div>
+  </div>
+
+  <!-- Supabase SDK：這行一定要完整，不可以只放 jsdelivr.net -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <script>
+    /************************************************************
+     * 請改成你自己的設定
+     ************************************************************/
+    const SUPABASE_URL = "https://uebzafxelfpfmpqbcgwd.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_JTcWsklR-rYX5AqKYxdymQ_b746IsEe";
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzI_ReRWMB4sEtKLYbZ_rzm5O_f8iyz4F_l_IORoVg6R1bSlXaQROgQf1WOFwSHy9RWAA/exec";
+
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    let matchedReservations = [];
+
+    function getTodayString() {
+      const today = new Date();
+      const yyyy = today.getFullYear();
+      const mm = String(today.getMonth() + 1).padStart(2, "0");
+      const dd = String(today.getDate()).padStart(2, "0");
+      return `${yyyy}-${mm}-${dd}`;
+    }
+
+    function getUrlParams() {
+      const params = new URLSearchParams(window.location.search);
+      return {
+        date: params.get("date") || "",
+        phone: params.get("phone") || "",
+        email: params.get("email") || "",
+        token: params.get("token") || ""
+      };
+    }
+
+    function fillFormFromUrl() {
+      const { date, phone, email, token } = getUrlParams();
+
+      document.getElementById("cancelDate").value = date;
+      document.getElementById("cancelPhone").value = phone;
+      document.getElementById("cancelEmail").value = email;
+      document.getElementById("cancelToken").value = token;
+
+      return { date, phone, email, token };
+    }
+
+    function checkRequiredParams(params) {
+      const missing = [];
+      if (!params.date) missing.push("預約日期 date");
+      if (!params.phone) missing.push("電話 phone");
+      if (!params.email) missing.push("Email email");
+      if (!params.token) missing.push("取消驗證碼 token");
+      return missing;
+    }
+
+    async function loadBookingInfo() {
+      const bookingInfo = document.getElementById("bookingInfo");
+      const cancelBtn = document.getElementById("cancelBtn");
+      const resultText = document.getElementById("resultText");
+
+      const params = fillFormFromUrl();
+      const missing = checkRequiredParams(params);
+
+      if (missing.length > 0) {
+        bookingInfo.innerText =
+          "❌ 無法讀取預約資料。\n" +
+          "原因：取消連結缺少以下參數：\n" +
+          missing.join("、") + "\n\n" +
+          "請回到預約成功通知信，重新點選「取消預約」連結。";
+        cancelBtn.disabled = true;
+        cancelBtn.innerText = "連結資料不完整";
+        return;
+      }
+
+      const todayString = getTodayString();
+      if (params.date <= todayString) {
+        bookingInfo.innerText =
+          "⚠️ 此預約日期為今天或已過期，無法透過網頁自行取消。\n" +
+          "請私訊官方 LINE，由櫃台協助處理。\n\n" +
+          "預約日期：" + params.date;
+        cancelBtn.disabled = true;
+        cancelBtn.innerText = "無法線上取消";
+        return;
+      }
+
+      const { data, error } = await supabaseClient
+        .from("reservations")
+        .select("id, user_name, booking_date, time_slot, row_group, phone, email, status, cancel_token")
+        .eq("booking_date", params.date)
+        .eq("phone", params.phone)
+        .eq("email", params.email)
+        .eq("cancel_token", params.token)
+        .eq("status", "booked")
+        .order("time_slot", { ascending: true });
+
+      if (error) {
+        bookingInfo.innerText = "❌ 查詢資料庫失敗：\n" + error.message;
+        resultText.innerText = "請確認 Supabase URL、anon key、資料表名稱與欄位名稱是否正確。";
+        cancelBtn.disabled = true;
+        cancelBtn.innerText = "查詢失敗";
+        return;
+      }
+
+      if (!data || data.length === 0) {
+        bookingInfo.innerText =
+          "⚠️ 查無可取消的有效預約。\n\n" +
+          "可能原因：\n" +
+          "1. 此預約已取消\n" +
+          "2. 驗證碼不正確\n" +
+          "3. 信件連結不完整\n" +
+          "4. Supabase 內的 status 不是 booked";
+        cancelBtn.disabled = true;
+        cancelBtn.innerText = "查無可取消預約";
+        return;
+      }
+
+      matchedReservations = data;
+
+      const first = data[0];
+      const times = data.map(item => item.time_slot).join("、");
+      const rows = data.map(item => item.row_group).join("、");
+
+      bookingInfo.innerText =
+        "✅ 已找到您的預約資料，請確認後再取消。\n" +
+        "---------------------------\n" +
+        "姓名：" + (first.user_name || "未填寫") + "\n" +
+        "預約日期：" + first.booking_date + "\n" +
+        "預約時段：" + times + "\n" +
+        "預約座位：" + rows + "\n" +
+        "電話：" + first.phone + "\n" +
+        "Email：" + first.email;
+
+      cancelBtn.disabled = false;
+      cancelBtn.innerText = "確認取消預約";
+    }
+
+    async function cancelBooking() {
+      const params = getUrlParams();
+      const missing = checkRequiredParams(params);
+
+      const cancelBtn = document.getElementById("cancelBtn");
+      const resultText = document.getElementById("resultText");
+
+      if (missing.length > 0) {
+        alert("取消連結資料不完整，缺少：" + missing.join("、"));
+        return;
+      }
+
+      if (!matchedReservations || matchedReservations.length === 0) {
+        alert("尚未讀取到可取消的預約資料，請重新整理頁面後再試。");
+        return;
+      }
+
+      const todayString = getTodayString();
+      if (params.date <= todayString) {
+        alert("預約當天或已過期的預約無法透過網頁自行取消，請私訊官方 LINE。");
+        return;
+      }
+
+      const first = matchedReservations[0];
+      const times = matchedReservations.map(item => item.time_slot).join("、");
+      const rows = matchedReservations.map(item => item.row_group).join("、");
+
+      const confirmCancel = confirm(
+        "確定要取消以下預約嗎？\n\n" +
+        "姓名：" + (first.user_name || "未填寫") + "\n" +
+        "日期：" + params.date + "\n" +
+        "時段：" + times + "\n" +
+        "座位：" + rows
+      );
+
+      if (!confirmCancel) return;
+
+      cancelBtn.disabled = true;
+      cancelBtn.innerText = "取消處理中...";
+      resultText.innerText = "正在更新資料庫，請稍候...";
+
+      const ids = matchedReservations.map(item => item.id);
+
+      const { error: updateError } = await supabaseClient
+        .from("reservations")
+        .update({
+          status: "cancelled",
+          note: "使用者由取消頁面自行取消",
+          cancelled_at: new Date().toISOString()
+        })
+        .in("id", ids)
+        .eq("status", "booked");
+
+      if (updateError) {
+        resultText.innerText = "❌ 取消失敗：\n" + updateError.message;
+        cancelBtn.disabled = false;
+        cancelBtn.innerText = "確認取消預約";
+        alert("取消失敗，請稍後再試或聯繫櫃台。");
+        return;
+      }
+
+      resultText.innerText =
+        "🎉 預約取消成功！\n" +
+        "---------------------------\n" +
+        "姓名：" + (first.user_name || "未填寫") + "\n" +
+        "預約日期：" + params.date + "\n" +
+        "取消時段：" + times + "\n" +
+        "取消座位：" + rows + "\n" +
+        "電話：" + params.phone + "\n" +
+        "Email：" + params.email + "\n\n" +
+        "系統將寄出取消成功通知信給學生與補習班。";
+
+      sendCancelEmailToGoogleScript({
+        action: "cancel",
+        token: params.token,
+        email: params.email,
+        userName: first.user_name || "",
+        date: params.date,
+        times: times,
+        rows: rows,
+        phone: params.phone
+      });
+
+      alert("預約取消成功！取消成功通知信將寄送至學生與補習班信箱。");
+      cancelBtn.innerText = "預約已成功取消";
+    }
+
+    function sendCancelEmailToGoogleScript(payload) {
+      const form = document.createElement("form");
+      form.method = "POST";
+      form.action = SCRIPT_URL;
+      form.target = "hidden_iframe";
+
+      const input = document.createElement("input");
+      input.type = "hidden";
+      input.name = "payload";
+      input.value = JSON.stringify(payload);
+
+      form.appendChild(input);
+      document.body.appendChild(form);
+      form.submit();
+
+      setTimeout(() => {
+        document.body.removeChild(form);
+      }, 1000);
+    }
+
+    window.addEventListener("DOMContentLoaded", loadBookingInfo);
+  </script>
+</body>
+</html>
