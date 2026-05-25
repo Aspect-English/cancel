@@ -86,8 +86,14 @@
       font-weight: bold;
     }
 
-    button:hover { background: #722f0b; }
-    button:disabled { background: #bbb; cursor: not-allowed; }
+    button:hover {
+      background: #722f0b;
+    }
+
+    button:disabled {
+      background: #bbb;
+      cursor: not-allowed;
+    }
 
     #bookingInfo, #resultText {
       white-space: pre-line;
@@ -119,6 +125,10 @@
       text-decoration: none;
       font-weight: bold;
     }
+
+    .back-link:hover {
+      text-decoration: underline;
+    }
   </style>
 </head>
 
@@ -145,8 +155,7 @@
       <label>預約 Email</label>
       <input id="cancelEmail" readonly />
 
-      <label>取消驗證碼</label>
-      <input id="cancelToken" readonly />
+      <input type="hidden" id="cancelToken" />
 
       <div class="notice">
         系統會依照信件連結自動帶入資料，並查詢原本的預約內容。
@@ -167,14 +176,19 @@
     </div>
   </div>
 
+  <!-- Supabase SDK：這行一定要完整，不可以只放 jsdelivr.net -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
   <script>
+    /************************************************************
+     * 請改成你自己的設定
+     ************************************************************/
     const SUPABASE_URL = "https://uebzafxelfpfmpqbcgwd.supabase.co";
     const SUPABASE_ANON_KEY = "sb_publishable_JTcWsklR-rYX5AqKYxdymQ_b746IsEe";
     const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzI_ReRWMB4sEtKLYbZ_rzm5O_f8iyz4F_l_IORoVg6R1bSlXaQROgQf1WOFwSHy9RWAA/exec";
 
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
     let matchedReservations = [];
 
     function getTodayString() {
@@ -196,12 +210,14 @@
     }
 
     function fillFormFromUrl() {
-      const params = getUrlParams();
-      document.getElementById("cancelDate").value = params.date;
-      document.getElementById("cancelPhone").value = params.phone;
-      document.getElementById("cancelEmail").value = params.email;
-      document.getElementById("cancelToken").value = params.token;
-      return params;
+      const { date, phone, email, token } = getUrlParams();
+
+      document.getElementById("cancelDate").value = date;
+      document.getElementById("cancelPhone").value = phone;
+      document.getElementById("cancelEmail").value = email;
+      document.getElementById("cancelToken").value = token;
+
+      return { date, phone, email, token };
     }
 
     function checkRequiredParams(params) {
@@ -217,11 +233,16 @@
       const bookingInfo = document.getElementById("bookingInfo");
       const cancelBtn = document.getElementById("cancelBtn");
       const resultText = document.getElementById("resultText");
+
       const params = fillFormFromUrl();
       const missing = checkRequiredParams(params);
 
       if (missing.length > 0) {
-        bookingInfo.innerText = "❌ 無法讀取預約資料。\n缺少：" + missing.join("、");
+        bookingInfo.innerText =
+          "❌ 無法讀取預約資料。\n" +
+          "原因：取消連結缺少以下參數：\n" +
+          missing.join("、") + "\n\n" +
+          "請回到預約成功通知信，重新點選「取消預約」連結。";
         cancelBtn.disabled = true;
         cancelBtn.innerText = "連結資料不完整";
         return;
@@ -229,7 +250,10 @@
 
       const todayString = getTodayString();
       if (params.date <= todayString) {
-        bookingInfo.innerText = "⚠️ 此預約日期為今天或已過期，無法透過網頁自行取消。\n請私訊官方 LINE，由櫃台協助處理。\n\n預約日期：" + params.date;
+        bookingInfo.innerText =
+          "⚠️ 此預約日期為今天或已過期，無法透過網頁自行取消。\n" +
+          "請私訊官方 LINE，由櫃台協助處理。\n\n" +
+          "預約日期：" + params.date;
         cancelBtn.disabled = true;
         cancelBtn.innerText = "無法線上取消";
         return;
@@ -259,27 +283,22 @@
           "可能原因：\n" +
           "1. 此預約已取消\n" +
           "2. 驗證碼不正確\n" +
-          "3. Supabase 的 status 不是 booked\n" +
-          "4. booking_date、phone、email 與連結資料不一致";
+          "3. 信件連結不完整\n" +
+          "4. Supabase 內的 status 不是 booked";
         cancelBtn.disabled = true;
         cancelBtn.innerText = "查無可取消預約";
         return;
       }
 
       matchedReservations = data;
+
       const first = data[0];
       const times = data.map(item => item.time_slot).join("、");
       const rows = data.map(item => item.row_group).join("、");
 
-      bookingInfo.innerText =
-        "✅ 已找到您的預約資料，請確認後再取消。\n" +
-        "---------------------------\n" +
-        "姓名：" + (first.user_name || "未填寫") + "\n" +
-        "預約日期：" + first.booking_date + "\n" +
-        "預約時段：" + times + "\n" +
-        "預約座位：" + rows + "\n" +
-        "電話：" + first.phone + "\n" +
-        "Email：" + first.email;
+      cancelBtn.disabled = false;
+      cancelBtn.innerText = "確認取消預約";
+
 
       cancelBtn.disabled = false;
       cancelBtn.innerText = "確認取消預約";
@@ -288,6 +307,7 @@
     async function cancelBooking() {
       const params = getUrlParams();
       const missing = checkRequiredParams(params);
+
       const cancelBtn = document.getElementById("cancelBtn");
       const resultText = document.getElementById("resultText");
 
@@ -301,7 +321,8 @@
         return;
       }
 
-      if (params.date <= getTodayString()) {
+      const todayString = getTodayString();
+      if (params.date <= todayString) {
         alert("預約當天或已過期的預約無法透過網頁自行取消，請私訊官方 LINE。");
         return;
       }
@@ -311,12 +332,13 @@
       const rows = matchedReservations.map(item => item.row_group).join("、");
 
       const confirmCancel = confirm(
-        "確定要取消以下預約嗎？\n\n" +
-        "姓名：" + (first.user_name || "未填寫") + "\n" +
-        "日期：" + params.date + "\n" +
-        "時段：" + times + "\n" +
-        "座位：" + rows
+      "請確認是否取消以下預約？\n\n" +
+      "預約日期：" + params.date + "\n\n" +
+      "預約時段：" + times + "\n\n" +
+      "預約座位：" + rows + "\n\n" +
+      "按下「確定」後將無法復原。"
       );
+
       if (!confirmCancel) return;
 
       cancelBtn.disabled = true;
@@ -384,7 +406,7 @@
       form.submit();
 
       setTimeout(() => {
-        if (form.parentNode) document.body.removeChild(form);
+        document.body.removeChild(form);
       }, 1000);
     }
 
