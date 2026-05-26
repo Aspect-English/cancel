@@ -168,12 +168,6 @@
       <h2>原預約內容</h2>
       <p id="bookingInfo">正在讀取預約資料...</p>
     </div>
-
-    <div class="box">
-      <h2>取消結果</h2>
-      <p id="resultText">尚未執行取消預約程序</p>
-      <a class="back-link" href="https://aspect-english.github.io/">返回預約頁面</a>
-    </div>
   </div>
 
   <!-- Supabase SDK：這行一定要完整，不可以只放 jsdelivr.net -->
@@ -232,7 +226,7 @@
     async function loadBookingInfo() {
       const bookingInfo = document.getElementById("bookingInfo");
       const cancelBtn = document.getElementById("cancelBtn");
-      const resultText = document.getElementById("resultText");
+    
 
       const params = fillFormFromUrl();
       const missing = checkRequiredParams(params);
@@ -271,7 +265,6 @@
 
       if (error) {
         bookingInfo.innerText = "❌ 查詢資料庫失敗：\n" + error.message;
-        resultText.innerText = "請確認 Supabase URL、anon key、資料表名稱與欄位名稱是否正確。";
         cancelBtn.disabled = true;
         cancelBtn.innerText = "查詢失敗";
         return;
@@ -309,8 +302,7 @@
       const missing = checkRequiredParams(params);
 
       const cancelBtn = document.getElementById("cancelBtn");
-      const resultText = document.getElementById("resultText");
-
+    
       if (missing.length > 0) {
         alert("取消連結資料不完整，缺少：" + missing.join("、"));
         return;
@@ -343,7 +335,6 @@
 
       cancelBtn.disabled = true;
       cancelBtn.innerText = "取消處理中...";
-      resultText.innerText = "正在更新資料庫，請稍候...";
 
       const ids = matchedReservations.map(item => item.id);
 
@@ -357,23 +348,11 @@
         .eq("status", "booked");
 
       if (updateError) {
-        resultText.innerText = "❌ 取消失敗：\n" + updateError.message;
         cancelBtn.disabled = false;
         cancelBtn.innerText = "確認取消預約";
         alert("取消失敗，請稍後再試或聯繫櫃台。");
         return;
       }
-
-      resultText.innerText =
-        "🎉 預約取消成功！\n" +
-        "---------------------------\n" +
-        "姓名：" + (first.user_name || "未填寫") + "\n" +
-        "預約日期：" + params.date + "\n" +
-        "取消時段：" + times + "\n" +
-        "取消座位：" + rows + "\n" +
-        "電話：" + params.phone + "\n" +
-        "Email：" + params.email + "\n\n" +
-        "系統將寄出取消成功通知信給學生與補習班。";
 
       sendCancelEmailToGoogleScript({
         action: "cancel",
